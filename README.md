@@ -74,14 +74,19 @@ frames; status goes to stderr.
 
 ## Publishing
 
-The npm package [`keelgrc-mcp`](https://www.npmjs.com/package/keelgrc-mcp) is built and
-published via npm OIDC **trusted publishing**: GitHub Actions authenticates to npm
-directly, so there is no stored token and no 2FA code, and each release carries build
-provenance. The first release (`0.1.0`) was a manual bootstrap, because trusted
-publishing can only be enabled for a package that already exists.
+This repository is the source of truth for the npm package
+[`keelgrc-mcp`](https://www.npmjs.com/package/keelgrc-mcp). It is published from here via
+npm OIDC **trusted publishing** (`.github/workflows/publish.yml`): GitHub Actions
+authenticates to npm directly, so there is no stored `NPM_TOKEN` and no 2FA code, and
+each release carries build provenance. The first release (`0.1.0`) was a manual
+bootstrap, because trusted publishing can only be enabled for a package that already
+exists.
 
-To cut a new release, bump `version` in `package.json` (npm rejects re-publishing an
-existing version) and run the publish workflow.
+The one-time trusted-publisher setup (npmjs.com -> the package -> Settings -> Trusted
+Publisher) is documented at the top of the workflow file. To cut a new release:
+
+1. Bump `version` in `package.json` (npm rejects re-publishing an existing version).
+2. Actions tab -> "Publish keelgrc-mcp" -> Run workflow, or publish a GitHub Release.
 
 ## Security notes
 

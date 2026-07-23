@@ -1,0 +1,52 @@
+name: Publish keelgrc-mcp
+
+# Publishes the `keelgrc-mcp` npm package from THIS repository using npm OIDC
+# "trusted publishing": GitHub Actions authenticates to npm directly, so there is
+# NO stored NPM_TOKEN and NO 2FA one-time code involved. Each release also carries
+# build provenance automatically.
+#
+# One-time setup on npmjs.com (do this once, with your passkey; browser only):
+#   npmjs.com -> the keelgrc-mcp package -> Settings -> Trusted Publisher ->
+#   GitHub Actions, with:
+#     Organization or user: Keel-GRC
+#     Repository:           keelgrc-mcp
+#     Workflow filename:    publish.yml
+#     Environment:          (leave blank)
+#
+# To publish a new version:
+#   1. Bump "version" in package.json (npm rejects re-publishing an existing version).
+#   2. Actions tab -> "Publish keelgrc-mcp" -> Run workflow, OR publish a GitHub
+#      Release. No secrets, no code entry.
+
+on:
+  workflow_dispatch: {}
+  release:
+    types: [published]
+
+concurrency:
+  group: publish-keelgrc-mcp
+  cancel-in-progress: false
+
+# id-token: write is what lets npm trust this workflow via OIDC.
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm >= 11.5.1; Node 22 still ships npm 10.x.
+      - name: Ensure npm supports trusted publishing
+        run: npm install -g npm@latest
+      - name: Install
+        run: npm install --no-audit --no-fund
+      - name: Build
+        run: npm run build
+      - name: Publish to npm (OIDC trusted publishing)
+        run: npm publish --access public
