@@ -1,0 +1,52 @@
+{
+  "name": "keelgrc-mcp",
+  "version": "0.1.0",
+  "description": "Model Context Protocol server for the Keel GRC API: drive your compliance program from Claude, Cursor, or any MCP client.",
+  "license": "MIT",
+  "author": "Keel GRC LLC",
+  "homepage": "https://keelgrc.com/open-source/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Keel-GRC/keelgrc-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Keel-GRC/keelgrc-mcp/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "grc",
+    "compliance",
+    "soc2",
+    "iso27001",
+    "keel",
+    "claude",
+    "cursor"
+  ],
+  "type": "module",
+  "bin": {
+    "keelgrc-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^6.0.3"
+  }
+}
