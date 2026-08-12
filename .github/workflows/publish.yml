@@ -5,6 +5,25 @@ name: Publish keelgrc-mcp
 # NO stored NPM_TOKEN and NO 2FA one-time code involved. Each release also carries
 # build provenance automatically.
 #
+# ─────────────────────────────────────────────────────────────────────────────
+# WHY THIS JOB IS PINNED AND LOCKED
+#
+# This is the highest-consequence workflow in the Keel org: it holds an OIDC token
+# that can publish to npm under Keel's name, with a provenance attestation saying
+# Keel built it. Anything that executes here executes with that authority.
+#
+# It previously ran `npm install -g npm@latest` and `npm install --no-audit` with no
+# lockfile in the repository. That resolved the whole dependency tree fresh at publish
+# time: a compromised release of any direct or transitive dependency — or of npm
+# itself — would have run its install scripts inside the job holding the token. That
+# is exactly the failure that put a package flagged as containing malicious code into
+# a Keel build once already (astro@7.1.0, GHSA-hpcx-pg6g-x697).
+#
+# So: a committed lockfile, `npm ci` (which refuses to deviate from it),
+# `--ignore-scripts` (nothing in this tree needs a postinstall — it is two pure-JS
+# dependencies), a pinned npm rather than `@latest`, and an audit that fails the job
+# rather than a flag that suppresses it.
+#
 # One-time setup on npmjs.com (do this once, with your passkey; browser only):
 #   npmjs.com -> the keelgrc-mcp package -> Settings -> Trusted Publisher ->
 #   GitHub Actions, with:
@@ -15,7 +34,10 @@ name: Publish keelgrc-mcp
 #
 # To publish a new version:
 #   1. Bump "version" in package.json (npm rejects re-publishing an existing version).
-#   2. Actions tab -> "Publish keelgrc-mcp" -> Run workflow, OR publish a GitHub
+#      The server reports that same version over MCP — it is read from package.json,
+#      not copied into the source.
+#   2. Commit the updated package-lock.json alongside it, or `npm ci` will fail here.
+#   3. Actions tab -> "Publish keelgrc-mcp" -> Run workflow, OR publish a GitHub
 #      Release. No secrets, no code entry.
 
 on:
@@ -36,17 +58,42 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
-      # Trusted publishing needs npm >= 11.5.1; Node 22 still ships npm 10.x.
-      - name: Ensure npm supports trusted publishing
-        run: npm install -g npm@latest
-      - name: Install
-        run: npm install --no-audit --no-fund
+          cache: npm
+
+      # Trusted publishing needs npm >= 11.5.1 and Node 22 still ships npm 10.x, so
+      # an upgrade is required. Pinned, not `@latest`: `@latest` means this job's
+      # publishing authority is handed to whatever npm published most recently.
+      - name: Install the pinned npm (trusted publishing needs >= 11.5.1)
+        run: npm install -g --ignore-scripts npm@12.0.2
+
+      # `ci` installs exactly the committed lockfile and fails if package.json and the
+      # lockfile disagree. `--ignore-scripts` means no dependency's install hook runs
+      # in a job that can publish as Keel.
+      - name: Install (locked, no install scripts)
+        run: npm ci --ignore-scripts
+
+      # Fails the job on a high/critical advisory instead of publishing over it.
+      # Keel's dependency non-negotiable applies to what Keel ships, and this is the
+      # one workflow that ships something.
+      - name: Audit
+        run: npm audit --audit-level=high
+
+      - name: Typecheck
+        run: npm run typecheck
+
       - name: Build
         run: npm run build
+
+      # Prove the built server actually starts and serves its tool list before it is
+      # published. A publish that ships a server no client can initialise is worse
+      # than no publish, and nothing else in this job would catch it.
+      - name: Smoke test the built server
+        run: node scripts/smoke.mjs
+
       - name: Publish to npm (OIDC trusted publishing)
-        run: npm publish --access public
+        run: npm publish --access public --ignore-scripts

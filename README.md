@@ -20,17 +20,33 @@ access than the key already has.
 | Tool | Maps to | Does |
 |------|---------|------|
 | `keel_whoami` | `GET /me` | Confirm the connected workspace (id, name, tier) |
-| `keel_list_controls` | `GET /controls` | List controls with status + owner |
+| `keel_list_controls` | `GET /controls` | List controls with state + owner (filter with `query`) |
 | `keel_readiness` | `GET /readiness` | ISO 27001 readiness % and requirement counts |
 | `keel_list_tasks` | `GET /tasks` | List compliance tasks |
 | `keel_create_task` | `POST /tasks` | Create a task (`title`, optional `description`, `dueAt`) |
+| `keel_list_risks` | `GET /risks` | List the risk register with inherent and residual scores |
+| `keel_create_risk` | `POST /risks` | Add a risk (`title`, `likelihood`, `impact`, `treatment`) |
+| `keel_list_vendors` | `GET /vendors` | List vendors (filter with `query`) |
+| `keel_create_vendor` | `POST /vendors` | Add a vendor (`name`, optional `tier`, `status`, …) |
+| `keel_list_people` | `GET /people` | List the personnel directory (filter with `query`) |
+| `keel_upsert_person` | `POST /people` | Add or update a person by email (idempotent) |
+| `keel_list_policies` | `GET /policies` | List policies (filter with `query`) |
+| `keel_create_policy` | `POST /policies` | Create a policy from Markdown |
+| `keel_list_evidence` | `GET /evidence` | List collected evidence (filter with `since`) |
+| `keel_add_evidence_link` | `POST /evidence` | Attach a URL as evidence, optionally to a control |
 | `keel_list_webhooks` | `GET /hooks` | List webhook subscriptions |
 | `keel_create_webhook` | `POST /hooks` | Subscribe a URL to events |
 | `keel_delete_webhook` | `DELETE /hooks/{id}` | Remove a subscription |
 
-The tool set tracks the API: as Keel's `/api/v1` surface grows (risks, vendors,
-policies, evidence ...), add the matching tool here, or regenerate from
-`/api/v1/openapi.json`.
+**One deliberate gap.** `POST /evidence` accepts a file upload as `multipart/form-data`
+as well as a link. This server implements the link form only — streaming a file
+through a stdio MCP transport is not something the protocol does well, and a tool
+that half-worked would be worse than one that says what it covers. Upload files in
+the Keel app or against the REST API directly.
+
+Tool descriptions quote API field names exactly (the control status field is called
+`state`, not `status`) and use enums with the API's own accepted values, because the
+description and schema are the only things the model sees before it calls a tool.
 
 ## Configuration
 
@@ -64,10 +80,15 @@ Add to your MCP config (`claude_desktop_config.json`, or `.mcp.json` for Claude 
 ## Develop
 
 ```bash
-npm install
+npm ci                              # installs exactly package-lock.json
 npm run build                       # compile to dist/
+npm run smoke                       # boot the built server and assert it speaks MCP
 KEEL_API_KEY=... node dist/index.js # run over stdio
 ```
+
+`npm run smoke` needs no API key and makes no network call: it starts `dist/index.js`,
+completes the MCP handshake, and checks the tool list, the advertised version, and that
+nothing but protocol frames reach stdout. It runs in CI before every publish.
 
 The server speaks MCP over **stdio**, so it never writes to stdout except protocol
 frames; status goes to stderr.
@@ -86,7 +107,16 @@ The one-time trusted-publisher setup (npmjs.com -> the package -> Settings -> Tr
 Publisher) is documented at the top of the workflow file. To cut a new release:
 
 1. Bump `version` in `package.json` (npm rejects re-publishing an existing version).
-2. Actions tab -> "Publish keelgrc-mcp" -> Run workflow, or publish a GitHub Release.
+   The server reports that same version in its MCP handshake — it reads `package.json`
+   rather than carrying a copy, so the two cannot drift.
+2. Commit the regenerated `package-lock.json` in the same change, or `npm ci` fails.
+3. Actions tab -> "Publish keelgrc-mcp" -> Run workflow, or publish a GitHub Release.
+
+The publish job is deliberately locked down, because it is the one place in Keel that
+holds an OIDC token able to publish under Keel's name with a provenance attestation:
+`npm ci` against a committed lockfile, `--ignore-scripts` so no dependency's install
+hook runs beside that token, a pinned npm rather than `@latest`, and an audit that
+fails the job instead of a flag that silences it.
 
 ## Security notes
 
