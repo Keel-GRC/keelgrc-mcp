@@ -11,41 +11,67 @@ Docs: <https://docs.keelgrc.com/api-mcp/mcp-server/> · Open source: <https://ke
 KEEL_API_KEY=your_key npx keelgrc-mcp
 ```
 
-It's a thin wrapper over the Keel public API (`/api/v1`). Every tool maps 1:1 to a
-real endpoint and is scoped to your API key's organization. The MCP grants no more
-access than the key already has.
+It's a thin wrapper over the Keel public API (`/api/v1`). Every action maps to a real
+endpoint and is scoped to your API key's organization. The MCP grants no more access
+than the key already has.
 
 ## Tools
 
-| Tool | Maps to | Does |
-|------|---------|------|
-| `keel_whoami` | `GET /me` | Confirm the connected workspace (id, name, tier) |
-| `keel_list_controls` | `GET /controls` | List controls with state + owner (filter with `query`) |
-| `keel_readiness` | `GET /readiness` | ISO 27001 readiness % and requirement counts |
-| `keel_list_tasks` | `GET /tasks` | List compliance tasks |
-| `keel_create_task` | `POST /tasks` | Create a task (`title`, optional `description`, `dueAt`) |
-| `keel_list_risks` | `GET /risks` | List the risk register with inherent and residual scores |
-| `keel_create_risk` | `POST /risks` | Add a risk (`title`, `likelihood`, `impact`, `treatment`) |
-| `keel_list_vendors` | `GET /vendors` | List vendors (filter with `query`) |
-| `keel_create_vendor` | `POST /vendors` | Add a vendor (`name`, optional `tier`, `status`, …) |
-| `keel_list_people` | `GET /people` | List the personnel directory (filter with `query`) |
-| `keel_upsert_person` | `POST /people` | Add or update a person by email (idempotent) |
-| `keel_list_policies` | `GET /policies` | List policies (filter with `query`) |
-| `keel_create_policy` | `POST /policies` | Create a policy from Markdown |
-| `keel_list_evidence` | `GET /evidence` | List collected evidence (filter with `since`) |
-| `keel_add_evidence_link` | `POST /evidence` | Attach a URL as evidence, optionally to a control |
-| `keel_list_webhooks` | `GET /hooks` | List webhook subscriptions |
-| `keel_create_webhook` | `POST /hooks` | Subscribe a URL to events |
-| `keel_delete_webhook` | `DELETE /hooks/{id}` | Remove a subscription |
+One tool per resource, with an `action` argument. Eleven tools cover thirty-nine
+operations; the alternative is a tool per operation, and MCP clients degrade badly
+past roughly a hundred tools.
 
-**One deliberate gap.** `POST /evidence` accepts a file upload as `multipart/form-data`
-as well as a link. This server implements the link form only — streaming a file
-through a stdio MCP transport is not something the protocol does well, and a tool
-that half-worked would be worse than one that says what it covers. Upload files in
-the Keel app or against the REST API directly.
+| Tool | Actions | Maps to |
+|------|---------|---------|
+| `keel_whoami` | (none) | `GET /me` |
+| `keel_frameworks` | (none) | `GET /frameworks` |
+| `keel_readiness` | (none) | `GET /readiness` |
+| `keel_controls` | list, get, update, delete | `/controls`, `/controls/{id}` |
+| `keel_tasks` | list, get, create, update | `/tasks`, `/tasks/{id}` |
+| `keel_risks` | list, get, create, update, delete | `/risks`, `/risks/{id}` |
+| `keel_vendors` | list, get, create, update, delete | `/vendors`, `/vendors/{id}` |
+| `keel_people` | list, get, create, update, delete | `/people`, `/people/{id}` |
+| `keel_policies` | list, get, create, update, delete | `/policies`, `/policies/{id}` |
+| `keel_evidence` | list, get, create, update, delete | `/evidence`, `/evidence/{id}` |
+| `keel_webhooks` | list, create, delete | `/hooks`, `/hooks/{id}` |
+
+Some actions are absent. Each is a gap in the REST surface, and each is stated in the
+tool description so a model reads an answer rather than a hole:
+
+- `keel_tasks` has no **delete**. Keel has no delete-a-task operation anywhere, the
+  app included. Update the status to `cancelled` instead, which keeps the record.
+- `keel_controls` has no **create**. Controls come from the framework content Keel
+  ships and from the app; no endpoint creates one.
+- `keel_webhooks` has no **get** or **update**. The API has neither. List them to read
+  one, and replace a subscription by deleting it and creating another.
+- `keel_vendors` reads the authentication posture (`auth`) and cannot write it. The
+  underlying update treats any one of `mfa`, `passwordPolicy` and `sso` as the caller
+  owning all three, so a partial write would silently clear the other two.
+- `keel_evidence` `create` covers **link evidence only**. `POST /evidence` also accepts
+  a file as `multipart/form-data`, which is not something a stdio transport streams
+  well; a tool that half-worked would be worse than one that says what it covers.
+  Upload files in the Keel app or against the REST API directly.
+
+`keel_readiness` answers for **ISO/IEC 27001:2022 only**, whatever framework the
+workspace actually runs. `keel_frameworks` is the one that answers for the workspace.
+Both are here because they are different questions, and the descriptions say which.
+
+### Roles
+
+The API key acts as the member who created it. Writes are refused for the auditor
+role, and most deletes need owner or admin, matching what the same person can do in
+the browser.
+
+A key created **before keys carried an actor** has no member and therefore no role.
+It can still read and create; every role-gated action answers 403 until the key is
+re-created under **Integrations -> API keys**. One of those gates is new in this
+release: **deleting a webhook subscription now requires owner or admin**, where it
+used to accept any valid key. A Zapier unsubscribe running on an old key will start
+failing and needs a fresh key.
 
 Tool descriptions quote API field names exactly (the control status field is called
-`state`, not `status`) and use enums with the API's own accepted values, because the
+`state`, not `status`; a vendor's `tier` on the way out is the residual and on the way
+in is the inherent) and use enums with the API's own accepted values, because the
 description and schema are the only things the model sees before it calls a tool.
 
 ## Configuration
