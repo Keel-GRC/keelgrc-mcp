@@ -1,6 +1,6 @@
 {
   "name": "keelgrc-mcp",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Model Context Protocol server for the Keel GRC API: drive your compliance program from Claude, Cursor, or any MCP client.",
   "license": "MIT",
   "author": "Keel GRC LLC",
