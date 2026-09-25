@@ -28,3 +28,10 @@ answer 404.
   `PATCH /api/v1/people/{id}` and `POST /api/v1/hooks` with a 400, as it already did for
   the other write routes. `keel_people` and `keel_webhooks` were already strict in
   0.4.0 and send only documented fields, so their inputs are unchanged.
+
+### Fixed
+
+- Every tool that puts an id or a framework key in the URL now refuses `""`, `"."` and
+  `".."` with an error naming the value. Those three were sent unencoded, and the
+  request resolved to a different `/api/v1` path: `keel_controls` `mappings` with an id
+  of `".."` called `/api/v1/crosswalks`. Any other value is percent-encoded as before.
