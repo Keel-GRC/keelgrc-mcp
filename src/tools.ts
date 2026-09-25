@@ -118,10 +118,13 @@ export function registerTools(server: McpServer): void {
     'keel_controls',
     {
       description:
-        'Read and maintain the workspace security controls. Actions: "list" (optional "query" substring over key and name), "get", "update", "delete". Each control has "id", "key", "name", "description", "state", "ownerEmail" and "ownerName" — note the status field is called "state", not "status". There is no "create": controls come from the framework content Keel ships and from the app, and the REST API has no endpoint that creates one. Updating "name", "description" or "ownerEmail" needs the owner or admin role; moving "state" alone is open to any role except auditor. Deleting a control also removes its framework mappings and its evidence and risk links, which moves the readiness denominator for every framework it was mapped to.',
+        'Read and maintain the workspace security controls and their clause mappings. Actions: "list" (optional "query" substring over key and name), "get", "update", "delete", "mappings", "map", "unmap". Each control has "id", "key", "name", "description", "state", "ownerEmail" and "ownerName" — note the status field is called "state", not "status". There is no "create" for a single control: use keel_starter_controls to add a framework\'s recommended controls, already mapped to its clauses. "mappings" lists the clauses a control is mapped to, as {"crosswalks":[{"frameworkKey","requirementRef","requirementTitle"}]}. "map" maps a control to one clause and "unmap" removes one mapping; a clause only counts toward readiness once a control is mapped to it. "map" needs a framework the workspace has applied (see keel_frameworks) and a "requirementRef" Keel authors for it, written exactly as Keel writes it (e.g. "4.1"); a section heading is refused because readiness never scores one. Mapping twice is harmless and reports "created": false. "unmap" on a clause the control is not mapped to fails rather than reporting success. Updating "name", "description" or "ownerEmail", "map" and "unmap" need the owner or admin role; moving "state" alone is open to any role except auditor. Deleting a control also removes its framework mappings and its evidence and risk links, which moves the readiness denominator for every framework it was mapped to.',
       inputSchema: z.strictObject({
-        action: z.enum(['list', 'get', 'update', 'delete']),
-        id: idField('control'),
+        action: z.enum(['list', 'get', 'update', 'delete', 'mappings', 'map', 'unmap']),
+        id: z
+          .string()
+          .optional()
+          .describe('The control id. Required for every action except list.'),
         query: z
           .string()
           .optional()
@@ -137,6 +140,14 @@ export function registerTools(server: McpServer): void {
           .enum(['not_started', 'in_progress', 'implemented', 'gap', 'not_applicable'])
           .optional()
           .describe('update only: the implementation state. Any role except auditor.'),
+        frameworkKey: z
+          .string()
+          .optional()
+          .describe('map and unmap: the framework key, as keel_frameworks lists it (e.g. "iso-9001").'),
+        requirementRef: z
+          .string()
+          .optional()
+          .describe('map and unmap: the clause reference exactly as Keel writes it (e.g. "4.1").'),
       }),
     },
     (a) =>
@@ -165,9 +176,50 @@ export function registerTools(server: McpServer): void {
             return keelFetch(`/controls/${seg(need(T, 'delete', 'id', a.id))}`, {
               method: 'DELETE',
             });
+          case 'mappings':
+            only(T, 'mappings', a, ['id']);
+            return keelFetch(`/controls/${seg(need(T, 'mappings', 'id', a.id))}/crosswalks`);
+          case 'map':
+            only(T, 'map', a, ['id', 'frameworkKey', 'requirementRef']);
+            return keelFetch(`/controls/${seg(need(T, 'map', 'id', a.id))}/crosswalks`, {
+              method: 'POST',
+              body: {
+                frameworkKey: need(T, 'map', 'frameworkKey', a.frameworkKey),
+                requirementRef: need(T, 'map', 'requirementRef', a.requirementRef),
+              },
+            });
+          case 'unmap':
+            only(T, 'unmap', a, ['id', 'frameworkKey', 'requirementRef']);
+            // The API takes the mapping to remove as query parameters, not a body.
+            return keelFetch(
+              `/controls/${seg(need(T, 'unmap', 'id', a.id))}/crosswalks${qs({
+                frameworkKey: need(T, 'unmap', 'frameworkKey', a.frameworkKey),
+                requirementRef: need(T, 'unmap', 'requirementRef', a.requirementRef),
+              })}`,
+              { method: 'DELETE' },
+            );
         }
         throw new Error(`${T}: unknown action.`);
       }),
+  );
+
+  // --- Starter controls -----------------------------------------------------
+  server.registerTool(
+    'keel_starter_controls',
+    {
+      description:
+        'Add a framework\'s recommended controls to the workspace, already mapped to its clauses. This is exactly what the "Add recommended controls" button on the Controls page does. Takes "frameworkKey" (e.g. "iso-9001"); the framework must be one the workspace has APPLIED (keel_frameworks lists them), and applying a framework is done in the Keel app, not here. A control the workspace already has keeps its name, description and state and only gains the clause mappings. Safe to repeat: a second call adds nothing. Returns "frameworkKey", "frameworkName", "starterControls", "controlsAdded", "controlsPresent", "mappingsAdded" and "mappingsSkipped" (normally 0). A framework Keel does not ship, or one with no recommended controls, is an error. Needs the owner or admin role.',
+      inputSchema: z.strictObject({
+        frameworkKey: z
+          .string()
+          .min(1)
+          .describe('The framework key, as keel_frameworks lists it (e.g. "iso-9001").'),
+      }),
+    },
+    (a) =>
+      tool(() =>
+        keelFetch(`/frameworks/${seg(a.frameworkKey)}/starter-controls`, { method: 'POST' }),
+      ),
   );
 
   // --- Tasks ----------------------------------------------------------------
@@ -240,13 +292,21 @@ export function registerTools(server: McpServer): void {
     'keel_risks',
     {
       description:
-        'Read and maintain the workspace risk register. Actions: "list", "get", "create", "update", "delete". Each risk has "id", "title", "description", "category", "likelihood", "impact", "inherentScore", "treatment", "residualLikelihood", "residualImpact", "residualScore", "status", "owner", "ownerEmail", "level" (low / medium / high), "mitigatingControls" and "implementedControls". The list is sorted by status first (open before closed), then level, then score, so an open low risk appears above a closed high one. Likelihood and impact are 1-5 and are clamped to that range. "update" changes only the fields you send. Creating and updating need any role except auditor; deleting needs the owner or admin role and is irreversible.',
+        'Read and maintain the workspace risk register. Actions: "list", "get", "create", "update", "delete". Each risk has "id", "title", "description", "category", "likelihood", "impact", "inherentScore", "treatment", "residualLikelihood", "residualImpact", "residualScore", "status", "owner", "ownerEmail", "level" (low / medium / high), "mitigatingControls" and "implementedControls". The list is sorted by status first (open before closed), then level, then score, so an open low risk appears above a closed high one; within a status, unscored risks come first. Likelihood and impact are 1-5 and are clamped to that range. A risk can be UNSCORED: create it without "likelihood" and "impact" (or with null), and "likelihood", "impact", "inherentScore" and "level" read back as null until it is scored. Keel does not invent a default score, so do not send 3 for a risk the source never assessed. "update" changes only the fields you send. Creating and updating need any role except auditor; deleting needs the owner or admin role and is irreversible.',
       inputSchema: z.strictObject({
         action: z.enum(['list', 'get', 'create', 'update', 'delete']),
         id: idField('risk'),
         title: z.string().optional().describe('Required for create.'),
-        likelihood: z.number().optional().describe('Inherent likelihood, 1-5. Required for create.'),
-        impact: z.number().optional().describe('Inherent impact, 1-5. Required for create.'),
+        likelihood: z
+          .number()
+          .nullable()
+          .optional()
+          .describe('Inherent likelihood, 1-5. Omit on create for an unscored risk; null clears it on update.'),
+        impact: z
+          .number()
+          .nullable()
+          .optional()
+          .describe('Inherent impact, 1-5. Omit on create for an unscored risk; null clears it on update.'),
         treatment: z
           .enum(['accept', 'mitigate', 'transfer', 'avoid'])
           .optional()
@@ -289,8 +349,6 @@ export function registerTools(server: McpServer): void {
           case 'create':
             only(T, 'create', a, ['title', 'description', 'category', 'likelihood', 'impact', 'treatment', 'status', 'owner', 'ownerEmail', 'residualLikelihood', 'residualImpact']);
             need(T, 'create', 'title', a.title);
-            need(T, 'create', 'likelihood', a.likelihood);
-            need(T, 'create', 'impact', a.impact);
             need(T, 'create', 'treatment', a.treatment);
             return keelFetch('/risks', { method: 'POST', body: fields });
           case 'update':

@@ -1,6 +1,6 @@
 {
   "name": "keelgrc-mcp",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Model Context Protocol server for the Keel GRC API: drive your compliance program from Claude, Cursor, or any MCP client.",
   "license": "MIT",
   "author": "Keel GRC LLC",
@@ -41,7 +41,7 @@
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run build",
     "smoke": "node scripts/smoke.mjs",
-    "test": "npm run typecheck && npm run build && npm run smoke"
+    "test": "npm run typecheck && npm run build && npm run smoke && node scripts/seg-test.mjs"
   },
   "//overrides": "fast-uri <3.1.6 carries four HIGH advisories (SSRF and host confusion, GHSA-5jgf-p345-68v8 and three siblings). It reaches this tree only through @modelcontextprotocol/sdk -> ajv, whose range is ^3.0.1, so the floor is set here. Bounded to the current major deliberately: an unbounded \">=\" range resolves to the newest release on any major, which turns a security patch into a breaking upgrade. Drop this once ajv ships a range that starts at or above the floor.",
   "overrides": {
