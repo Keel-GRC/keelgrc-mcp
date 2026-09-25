@@ -42,6 +42,32 @@ export function need<T>(tool: string, action: string, field: string, value: T | 
   return value;
 }
 
+/**
+ * Refuse arguments the chosen action does not send.
+ *
+ * The input schema is strict, so a name no action knows is already a validation
+ * error. That leaves a name some OTHER action of the same tool takes: `title` on a
+ * task update, `controlKey` on an evidence update. Each case below builds its request
+ * from a fixed list, so such an argument used to vanish while the call reported
+ * success. This makes it an error naming the argument and what the action accepts.
+ */
+export function only(
+  tool: string,
+  action: string,
+  args: Record<string, unknown>,
+  accepted: readonly string[],
+): void {
+  const stray = Object.keys(args).filter(
+    (k) => k !== 'action' && args[k] !== undefined && !accepted.includes(k),
+  );
+  if (stray.length > 0) {
+    throw new Error(
+      `${tool}: the "${action}" action does not take ${stray.map((k) => `"${k}"`).join(', ')}. ` +
+        (accepted.length ? `It accepts: ${accepted.join(', ')}.` : 'It takes no other arguments.'),
+    );
+  }
+}
+
 /** Path-safe id segment. Ids are uuids, but a model will send whatever it has. */
 export function seg(id: string): string {
   return encodeURIComponent(id);

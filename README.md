@@ -17,13 +17,14 @@ than the key already has.
 
 ## Tools
 
-One tool per resource, with an `action` argument. Eleven tools cover thirty-nine
+One tool per resource, with an `action` argument. Twelve tools cover forty
 operations; the alternative is a tool per operation, and MCP clients degrade badly
 past roughly a hundred tools.
 
 | Tool | Actions | Maps to |
 |------|---------|---------|
 | `keel_whoami` | (none) | `GET /me` |
+| `keel_members` | (none) | `GET /members` |
 | `keel_frameworks` | (none) | `GET /frameworks` |
 | `keel_readiness` | (none) | `GET /readiness` |
 | `keel_controls` | list, get, update, delete | `/controls`, `/controls/{id}` |
@@ -63,11 +64,24 @@ role, and most deletes need owner or admin, matching what the same person can do
 the browser.
 
 A key created **before keys carried an actor** has no member and therefore no role.
-It can still read and create; every role-gated action answers 403 until the key is
-re-created under **Integrations -> API keys**. One of those gates is new in this
-release: **deleting a webhook subscription now requires owner or admin**, where it
-used to accept any valid key. A Zapier unsubscribe running on an old key will start
-failing and needs a fresh key.
+It can still read; every write answers 403 until the key is re-created under
+**Integrations -> API keys**. **Deleting a webhook subscription requires owner or
+admin**, where it used to accept any valid key, so a Zapier unsubscribe running on an
+old key fails and needs a fresh key.
+
+### Unknown arguments are errors
+
+Every tool's input schema is strict, and each action refuses an argument it does not
+send. Before 0.4.0 both were dropped silently and the call still reported success, so a
+`startDate` on a task or a `vendorId` on evidence vanished without a word. The REST API
+does the same on its side: a write whose body carries an undocumented field gets a 400
+listing it in `unknownFields`.
+
+People are named by email where the API resolves them: `assigneeEmail` on tasks and
+`ownerEmail` on policies must match a workspace member (`keel_members` lists them), or
+the call fails and nothing is written. Evidence links to controls through
+`controlId`/`controlKey` on create and `linkControls`/`unlinkControls` on update; a
+control that is not in the workspace is an error rather than a missing link.
 
 Tool descriptions quote API field names exactly (the control status field is called
 `state`, not `status`; a vendor's `tier` on the way out is the residual and on the way
