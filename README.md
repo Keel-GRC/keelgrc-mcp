@@ -17,7 +17,7 @@ than the key already has.
 
 ## Tools
 
-One tool per resource, with an `action` argument. Thirteen tools cover forty-four
+One tool per resource, with an `action` argument. Thirteen tools cover forty-five
 operations; the alternative is a tool per operation, and MCP clients degrade badly
 past roughly a hundred tools.
 
@@ -27,7 +27,7 @@ past roughly a hundred tools.
 | `keel_members` | (none) | `GET /members` |
 | `keel_frameworks` | (none) | `GET /frameworks` |
 | `keel_readiness` | (none) | `GET /readiness` |
-| `keel_controls` | list, get, update, delete, mappings, map, unmap | `/controls`, `/controls/{id}`, `/controls/{id}/crosswalks` |
+| `keel_controls` | list, get, create, update, delete, mappings, map, unmap | `/controls`, `/controls/{id}`, `/controls/{id}/crosswalks` |
 | `keel_starter_controls` | (none) | `POST /frameworks/{key}/starter-controls` |
 | `keel_tasks` | list, get, create, update | `/tasks`, `/tasks/{id}` |
 | `keel_risks` | list, get, create, update, delete | `/risks`, `/risks/{id}` |
@@ -42,10 +42,11 @@ tool description so a model reads an answer rather than a hole:
 
 - `keel_tasks` has no **delete**. Keel has no delete-a-task operation anywhere, the
   app included. Update the status to `cancelled` instead, which keeps the record.
-- `keel_controls` has no **create** for a single control. `keel_starter_controls` adds a
-  framework's recommended controls, already mapped to its clauses, exactly as the "Add
-  recommended controls" button does; a bespoke control is still created in the app.
-  `map` and `unmap` then attach any control to any clause of an applied framework.
+- `keel_controls` `create` takes no **state**, **owner** or **mappings**. It takes a name,
+  a description and an optional `key` of your own, which is all the app's "Add a control"
+  form takes. A new control starts `not_started`, unowned and unmapped: set `state` and
+  `ownerEmail` with `update`, and clauses with `map`, which attaches any control to any
+  clause of an applied framework.
 - Applying a framework is not here. It is plan-metered and happens in the app;
   `keel_starter_controls` and `map` refuse a framework the workspace has not applied.
 - `keel_webhooks` has no **get** or **update**. The API has neither. List them to read

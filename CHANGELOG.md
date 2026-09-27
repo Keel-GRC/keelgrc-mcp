@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.6.0
+
+Paired with the keelgrc-v1 change that adds `POST /api/v1/controls` and embeds `crosswalks`
+in `GET /api/v1/controls/{id}` (D805). This release needs a Keel deployment that has them;
+against an older one, `create` answers 405 and `get` returns no `crosswalks`.
+
+### Added
+
+- `keel_controls` `create`: one custom control, as the app's "Add a control" does. Takes
+  `name` (required), `description` and `key`, your own identifier for the control. Omit
+  `key` and Keel generates one. A key the workspace already uses fails with the existing
+  control in the error, and nothing is overwritten. The new control starts `not_started`
+  with no owner and no mappings. Owner or admin.
+- `keel_controls` `get` returns `crosswalks`, the clauses the control is mapped to, in the
+  same shape `mappings` returns them. `list` does not carry them.
+
+### Changed
+
+- The `keel_controls` description no longer says there is no create for a single control.
+
 ## 0.5.0
 
 Paired with the keelgrc-v1 change that adds the endpoints below (D781, D782, D784). This

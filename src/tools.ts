@@ -118,19 +118,29 @@ export function registerTools(server: McpServer): void {
     'keel_controls',
     {
       description:
-        'Read and maintain the workspace security controls and their clause mappings. Actions: "list" (optional "query" substring over key and name), "get", "update", "delete", "mappings", "map", "unmap". Each control has "id", "key", "name", "description", "state", "ownerEmail" and "ownerName" — note the status field is called "state", not "status". There is no "create" for a single control: use keel_starter_controls to add a framework\'s recommended controls, already mapped to its clauses. "mappings" lists the clauses a control is mapped to, as {"crosswalks":[{"frameworkKey","requirementRef","requirementTitle"}]}. "map" maps a control to one clause and "unmap" removes one mapping; a clause only counts toward readiness once a control is mapped to it. "map" needs a framework the workspace has applied (see keel_frameworks) and a "requirementRef" Keel authors for it, written exactly as Keel writes it (e.g. "4.1"); a section heading is refused because readiness never scores one. Mapping twice is harmless and reports "created": false. "unmap" on a clause the control is not mapped to fails rather than reporting success. Updating "name", "description" or "ownerEmail", "map" and "unmap" need the owner or admin role; moving "state" alone is open to any role except auditor. Deleting a control also removes its framework mappings and its evidence and risk links, which moves the readiness denominator for every framework it was mapped to.',
+        'Read and maintain the workspace security controls and their clause mappings. Actions: "list" (optional "query" substring over key and name), "get", "create", "update", "delete", "mappings", "map", "unmap". Each control has "id", "key", "name", "description", "state", "ownerEmail" and "ownerName" — note the status field is called "state", not "status". "get" also returns "crosswalks", the clauses the control is mapped to, as [{"frameworkKey","requirementRef","requirementTitle"}]; "list" does not. "create" adds one custom control, as "Add a control" does in the app: "name" is required, "description" is optional, and "key" is your own identifier (at most 60 characters, not shaped like a uuid, with no control or invisible formatting characters, unique in the workspace); omit it and Keel generates one. A key the workspace already uses is refused, and the error carries the existing control. A new control starts "not_started" with no owner and no mappings, so set "state" or "ownerEmail" with "update" and clauses with "map" afterwards. To add a framework\'s recommended controls, already mapped to its clauses, use keel_starter_controls instead. "mappings" lists the clauses a control is mapped to, as {"crosswalks":[{"frameworkKey","requirementRef","requirementTitle"}]}. "map" maps a control to one clause and "unmap" removes one mapping; a clause only counts toward readiness once a control is mapped to it. "map" needs a framework the workspace has applied (see keel_frameworks) and a "requirementRef" Keel authors for it, written exactly as Keel writes it (e.g. "4.1"); a section heading is refused because readiness never scores one. Mapping twice is harmless and reports "created": false. "unmap" on a clause the control is not mapped to fails rather than reporting success. "create", updating "name", "description" or "ownerEmail", "map" and "unmap" need the owner or admin role; moving "state" alone is open to any role except auditor. Deleting a control also removes its framework mappings and its evidence and risk links, which moves the readiness denominator for every framework it was mapped to.',
       inputSchema: z.strictObject({
-        action: z.enum(['list', 'get', 'update', 'delete', 'mappings', 'map', 'unmap']),
+        action: z.enum(['list', 'get', 'create', 'update', 'delete', 'mappings', 'map', 'unmap']),
         id: z
           .string()
           .optional()
-          .describe('The control id. Required for every action except list.'),
+          .describe('The control id. Required for every action except list and create.'),
         query: z
           .string()
           .optional()
           .describe('list only: case-insensitive substring filter over the control key or name.'),
-        name: z.string().optional().describe('update only. Owner or admin.'),
-        description: z.string().nullable().optional().describe('update only. Owner or admin.'),
+        key: z
+          .string()
+          .optional()
+          .describe(
+            'create only: your identifier for the control (e.g. "AC-1"), unique in the workspace, at most 60 characters, not shaped like a uuid, and with no control or invisible formatting characters. Omit it to have Keel generate one from the name. The key cannot be changed afterwards.',
+          ),
+        name: z.string().optional().describe('create (required) and update. Owner or admin.'),
+        description: z
+          .string()
+          .nullable()
+          .optional()
+          .describe('create and update. Owner or admin.'),
         ownerEmail: z
           .string()
           .nullable()
@@ -160,6 +170,16 @@ export function registerTools(server: McpServer): void {
           case 'get':
             only(T, 'get', a, ['id']);
             return keelFetch(`/controls/${seg(need(T, 'get', 'id', a.id))}`);
+          case 'create':
+            only(T, 'create', a, ['key', 'name', 'description']);
+            return keelFetch('/controls', {
+              method: 'POST',
+              body: compact({
+                key: a.key,
+                name: need(T, 'create', 'name', a.name),
+                description: a.description,
+              }),
+            });
           case 'update':
             only(T, 'update', a, ['id', 'name', 'description', 'ownerEmail', 'state']);
             return keelFetch(`/controls/${seg(need(T, 'update', 'id', a.id))}`, {
