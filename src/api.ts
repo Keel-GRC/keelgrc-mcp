@@ -68,8 +68,21 @@ export function only(
   }
 }
 
-/** Path-safe id segment. Ids are uuids, but a model will send whatever it has. */
+/**
+ * Path-safe id segment. Ids are uuids, but a model will send whatever it has.
+ *
+ * `encodeURIComponent` leaves "." and ".." as they are, and `fetch` resolves them as
+ * dot segments: `/controls/../crosswalks` goes to `/api/v1/crosswalks`, a different
+ * route from the one the tool meant. An empty segment collapses the path the same way.
+ * No Keel id or framework key is any of the three, so they are refused here rather than
+ * sent somewhere else.
+ */
 export function seg(id: string): string {
+  if (id === '' || id === '.' || id === '..') {
+    throw new Error(
+      `${JSON.stringify(id)} is not a valid id. Keel ids and framework keys are never empty, "." or "..".`,
+    );
+  }
   return encodeURIComponent(id);
 }
 
