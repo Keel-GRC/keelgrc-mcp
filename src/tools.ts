@@ -293,10 +293,14 @@ export function registerTools(server: McpServer): void {
     'keel_tasks',
     {
       description:
-        'Read and maintain the workspace compliance tasks. Actions: "list", "get", "create", "update". Each task has "id", "title", "description", "status" (open / in_progress / blocked / done / cancelled), "dueAt", "createdAt", "relatedEntityType" and the assignee as "assigneeId" / "assigneeName" / "assigneeEmail". There is NO "delete", and that is not a gap in this server: Keel has no delete-a-task operation on any surface, the app included, so nothing to map exists. Retire a task by updating its "status" to "cancelled", which keeps it as a record of what was decided. "update" changes the status, the assignee, or both; title, description and due date are not editable after creation, in the app either. Assign with "assigneeEmail", which must be the email of a workspace member (see keel_members) or the call fails and nothing is written; the assignment fires the task.assigned webhook but sends no email. Tasks have no start date. Any role except auditor.',
+        'Read and maintain the workspace compliance tasks. Actions: "list" (optional "query" substring over the title), "get", "create", "update". Each task has "id", "title", "description", "status" (open / in_progress / blocked / done / cancelled), "dueAt", "createdAt", "relatedEntityType" and the assignee as "assigneeId" / "assigneeName" / "assigneeEmail". There is NO "delete", and that is not a gap in this server: Keel has no delete-a-task operation on any surface, the app included, so nothing to map exists. Retire a task by updating its "status" to "cancelled", which keeps it as a record of what was decided. "update" changes the status, the assignee, or both; title, description and due date are not editable after creation, in the app either. Assign with "assigneeEmail", which must be the email of a workspace member (see keel_members) or the call fails and nothing is written; the assignment fires the task.assigned webhook but sends no email. Tasks have no start date. Any role except auditor.',
       inputSchema: z.strictObject({
         action: z.enum(['list', 'get', 'create', 'update']),
         id: idField('task'),
+        query: z
+          .string()
+          .optional()
+          .describe('list only: case-insensitive substring filter over the task title.'),
         title: z.string().optional().describe('create only: short task title (required).'),
         description: z.string().optional().describe('create only.'),
         dueAt: z
@@ -323,8 +327,8 @@ export function registerTools(server: McpServer): void {
         const T = 'keel_tasks';
         switch (a.action) {
           case 'list':
-            only(T, 'list', a, []);
-            return keelFetch('/tasks');
+            only(T, 'list', a, ['query']);
+            return keelFetch(`/tasks${qs({ query: a.query })}`);
           case 'get':
             only(T, 'get', a, ['id']);
             return keelFetch(`/tasks/${seg(need(T, 'get', 'id', a.id))}`);
@@ -777,7 +781,7 @@ export function registerTools(server: McpServer): void {
     'keel_webhooks',
     {
       description:
-        'Read and maintain the workspace webhook subscriptions. Actions: "list", "create", "rotate", "delete". Each subscription has "id", "targetUrl", "event" and "createdVia". "list" shows the full "targetUrl" only to an owner or admin key; any other key sees just its origin (https://host), because a full target URL can work as a credential. There is no "get" and no "update", because the REST API has neither: read one by listing them, and replace a subscription by deleting it and creating another. "create" requires a public HTTPS URL; the API rejects http://, localhost and private network addresses. Event "all" receives every event. Each delivery is a JSON body { id, event, data, orgId, at } where "id" identifies the event. "create" returns the subscription\'s signing "secret" (starts with whsec_), and it is shown ONCE: "list" never returns it, so give it to the user straight away to store with the receiving endpoint. "rotate" (takes "id") replaces a lost or exposed secret: it returns the new "secret", also shown once, and "previousSecretExpiresAt", 24 hours out, until which the old secret keeps signing too. Every delivery carries "x-keel-event-id", "x-keel-subscription-id" and "x-keel-signature". The signature header is "v1=" plus the lowercase hex HMAC-SHA256 of the raw request body, keyed with the whole secret string; during a rotation window it holds two comma-separated "v1=" values, current first. The receiver recomputes the HMAC over the exact bytes it received, accepts if it equals any "v1=" value (constant-time comparison), can reject a body whose "at" timestamp is more than a few minutes old to refuse replays, and should drop a repeated "x-keel-event-id", since a delivery can arrive twice. If the server is not configured to seal secrets, "create" and "rotate" fail with 503 and change nothing. ROTATING AND DELETING NEED THE OWNER OR ADMIN ROLE. The delete gate is new: that endpoint used to accept any valid key, so an integration running on a key created before keys carried an actor now gets 403 there and the key has to be re-created. Deleting is idempotent, so a success does not prove a subscription existed; list them to confirm.',
+        'Read and maintain the workspace webhook subscriptions. Actions: "list", "create", "rotate", "delete". Each subscription has "id", "targetUrl", "event" and "createdVia". "list" shows the full "targetUrl" only to an owner or admin key; any other key sees just its origin (https://host), because a full target URL can work as a credential. There is no "get" and no "update", because the REST API has neither: read one by listing them, and replace a subscription by deleting it and creating another. "create" requires a public HTTPS URL; the API rejects http://, localhost and private network addresses. "event" must be "all" or the exact name of an event Keel emits, such as control.status_changed or task.created; omit it to get "all", which receives every event. The API rejects any other name with 400 and creates nothing, and its error message lists every valid name, so fix a rejected name from that list rather than guessing again. Each delivery is a JSON body { id, event, data, orgId, at } where "id" identifies the event. "create" returns the subscription\'s signing "secret" (starts with whsec_), and it is shown ONCE: "list" never returns it, so give it to the user straight away to store with the receiving endpoint. "rotate" (takes "id") replaces a lost or exposed secret: it returns the new "secret", also shown once, and "previousSecretExpiresAt", 24 hours out, until which the old secret keeps signing too. Every delivery carries "x-keel-event-id", "x-keel-subscription-id" and "x-keel-signature". The signature header is "v1=" plus the lowercase hex HMAC-SHA256 of the raw request body, keyed with the whole secret string; during a rotation window it holds two comma-separated "v1=" values, current first. The receiver recomputes the HMAC over the exact bytes it received, accepts if it equals any "v1=" value (constant-time comparison), can reject a body whose "at" timestamp is more than a few minutes old to refuse replays, and should drop a repeated "x-keel-event-id", since a delivery can arrive twice. If the server is not configured to seal secrets, "create" and "rotate" fail with 503 and change nothing. ROTATING AND DELETING NEED THE OWNER OR ADMIN ROLE. The delete gate is new: that endpoint used to accept any valid key, so an integration running on a key created before keys carried an actor now gets 403 there and the key has to be re-created. Deleting is idempotent, so a success does not prove a subscription existed; list them to confirm.',
       inputSchema: z.strictObject({
         action: z.enum(['list', 'create', 'rotate', 'delete']),
         id: z.string().optional().describe('The subscription id. Required for rotate and delete.'),
@@ -792,7 +796,9 @@ export function registerTools(server: McpServer): void {
         event: z
           .string()
           .optional()
-          .describe('create only: event name to subscribe to (e.g. control.status_changed) or "all".'),
+          .describe(
+            'create only: "all" (the default when omitted) or the exact name of an event Keel emits, e.g. control.status_changed. The API rejects an unknown name with 400 and lists the valid ones.',
+          ),
       }),
     },
     (a) =>

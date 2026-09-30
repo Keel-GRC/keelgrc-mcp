@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.0
 
 Paired with the keelgrc-v1 change that moves `POST /api/v1/people` from "any role except
 auditor" to owner or admin (D824). The role check is on the Keel side, so it applies to
@@ -43,6 +43,20 @@ deployment without these, `rotate` answers 404 and `list` returns full URLs as b
   the old one keeps signing until the expiry (D829a, D830a). Additive.
 - `scripts/webhook-secret-test.mjs` covers `rotate`: the path, the empty body, the fields
   passed through, the note, and the refusals for a missing `id` or a stray argument.
+- `keel_tasks` `list` takes an optional `query`, a case-insensitive substring over the
+  task title, sent as `GET /api/v1/tasks?query=` the way `keel_controls` and `keel_vendors`
+  send theirs. Paired with the keelgrc-v1 change that adds the filter (D833b). Against a
+  Keel deployment without it the parameter is ignored and every task comes back. Additive.
+
+### Changed (D835a)
+
+- The `keel_webhooks` description and its `event` argument say that `event` must be "all"
+  or the exact name of an event Keel emits, and that omitting it means "all". Paired with
+  the keelgrc-v1 change that makes `POST /api/v1/hooks` reject any other name with a 400
+  whose message lists the valid names, and create nothing. Until then a typo such as
+  `task.create` subscribed successfully and never fired. The check is on the Keel side, so
+  it applies to every version of this server as soon as that change deploys; this server
+  still sends `event` as given.
 
 ### Changed (D827a)
 
