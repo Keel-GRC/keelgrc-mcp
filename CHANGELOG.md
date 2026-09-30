@@ -44,6 +44,16 @@ deployment without these, `rotate` answers 404 and `list` returns full URLs as b
 - `scripts/webhook-secret-test.mjs` covers `rotate`: the path, the empty body, the fields
   passed through, the note, and the refusals for a missing `id` or a stray argument.
 
+### Changed (D835a)
+
+- The `keel_webhooks` description and its `event` argument say that `event` must be "all"
+  or the exact name of an event Keel emits, and that omitting it means "all". Paired with
+  the keelgrc-v1 change that makes `POST /api/v1/hooks` reject any other name with a 400
+  whose message lists the valid names, and create nothing. Until then a typo such as
+  `task.create` subscribed successfully and never fired. The check is on the Keel side, so
+  it applies to every version of this server as soon as that change deploys; this server
+  still sends `event` as given.
+
 ### Changed (D827a)
 
 - The `keel_webhooks` description no longer says the signing secret is never returned.
