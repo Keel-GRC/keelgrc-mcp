@@ -67,7 +67,8 @@ Both are here because they are different questions, and the descriptions say whi
 
 The API key acts as the member who created it. Writes are refused for the auditor
 role, and most deletes need owner or admin, matching what the same person can do in
-the browser.
+the browser. **Every `keel_people` write needs owner or admin, `create` included**,
+because `create` updates a person who already exists and can change their status.
 
 A key created **before keys carried an actor** has no member and therefore no role.
 It can still read; every write answers 403 until the key is re-created under

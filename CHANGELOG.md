@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+Paired with the keelgrc-v1 change that moves `POST /api/v1/people` from "any role except
+auditor" to owner or admin (D824). The role check is on the Keel side, so it applies to
+every version of this server as soon as that change deploys.
+
+### Changed
+
+- **Breaking for member keys:** `keel_people` `create` now needs a key created by an
+  owner or admin. A member's key gets 403 on `create`, including when the email already
+  exists and the call would have updated that person. `list` and `get` still accept any
+  key. `update` and `delete` already needed owner or admin.
+- The `keel_people` description says so, and says that `create` on an existing manually
+  added person replaces the whole profile, clearing any field you leave out.
+
+### Added
+
+- `scripts/forbidden-test.mjs`, run by `npm test`: a 403 on `keel_people` `create`
+  reaches the client as an error carrying the API's own message.
+
 ## 0.6.0
 
 Paired with the keelgrc-v1 change that adds `POST /api/v1/controls` and embeds `crosswalks`
