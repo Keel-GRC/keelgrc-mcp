@@ -6,6 +6,10 @@ Paired with the keelgrc-v1 change that moves `POST /api/v1/people` from "any rol
 auditor" to owner or admin (D824). The role check is on the Keel side, so it applies to
 every version of this server as soon as that change deploys.
 
+Also paired with the keelgrc-v1 change that makes webhook signing real (D827a):
+`POST /api/v1/hooks` generates a signing secret, stores it, and returns it once in the 201
+body. Deliveries to that subscription then carry `x-keel-signature`.
+
 ### Changed
 
 - **Breaking for member keys:** `keel_people` `create` now needs a key created by an
@@ -19,6 +23,18 @@ every version of this server as soon as that change deploys.
 
 - `scripts/forbidden-test.mjs`, run by `npm test`: a 403 on `keel_people` `create`
   reaches the client as an error carrying the API's own message.
+- `keel_webhooks` `create` surfaces the subscription's signing `secret`, which
+  `POST /api/v1/hooks` now returns once (keelgrc-v1, D827a). The result keeps every field
+  the API sent and adds `secretNote`, which tells the model the secret is shown once and how
+  a receiver verifies the `x-keel-signature` header. Against a Keel deployment that predates
+  the change there is no `secret`, and the result is passed through unchanged. Additive.
+- `scripts/webhook-secret-test.mjs`, run by `npm test`: `create` passes the secret through
+  with the note, `list` output is untouched, and a response with no secret gets no note.
+
+### Changed (D827a)
+
+- The `keel_webhooks` description no longer says the signing secret is never returned.
+  It says `create` returns it once and describes how to verify a delivery.
 
 ## 0.6.0
 

@@ -68,6 +68,35 @@ const clearableDate = (what: string) =>
     .optional()
     .describe(`${what} as an ISO-8601 date-time, or null to clear it. Omit to leave unchanged.`);
 
+/** Added beside `secret` on a `keel_webhooks` create, so the model relays it rather than dropping it. */
+export const WEBHOOK_SECRET_NOTE =
+  'This is the signing secret for this subscription and it is shown once: keel_webhooks "list" ' +
+  'never returns it. Give it to the user now to store with the receiving endpoint. Each delivery ' +
+  'carries an "x-keel-signature" header, the lowercase hex HMAC-SHA256 of the raw request body ' +
+  'keyed with this whole string (whsec_ prefix included). Verify by recomputing it over the exact ' +
+  'bytes received and comparing in constant time, and reject a body whose "at" is more than a few ' +
+  'minutes old to refuse replays.';
+
+/**
+ * Pass a `POST /hooks` body through, adding `secretNote` when it carries a `secret`.
+ *
+ * The body is otherwise unchanged, so every field the API returns still reaches the
+ * model under its own name. A Keel deployment that predates signing secrets returns no
+ * `secret`, and then the body is returned exactly as received.
+ */
+export function withSecretNote(text: string): string {
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    return text;
+  }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return text;
+  const secret = (body as Record<string, unknown>).secret;
+  if (typeof secret !== 'string' || !secret) return text;
+  return JSON.stringify({ ...(body as Record<string, unknown>), secretNote: WEBHOOK_SECRET_NOTE });
+}
+
 export function registerTools(server: McpServer): void {
   // --- Identity -------------------------------------------------------------
   server.registerTool(
@@ -731,7 +760,7 @@ export function registerTools(server: McpServer): void {
     'keel_webhooks',
     {
       description:
-        'Read and maintain the workspace webhook subscriptions. Actions: "list", "create", "delete". Each subscription has "id", "targetUrl", "event" and "createdVia"; the signing secret is never returned. There is no "get" and no "update", because the REST API has neither: read one by listing them, and replace a subscription by deleting it and creating another. "create" requires a public HTTPS URL — the API rejects http://, localhost and private network addresses — and event "all" receives every event. DELETING NEEDS THE OWNER OR ADMIN ROLE. That gate is new: this endpoint used to accept any valid key, so an integration running on a key created before keys carried an actor now gets 403 here and the key has to be re-created. Deleting is idempotent, so a success does not prove a subscription existed; list them to confirm.',
+        'Read and maintain the workspace webhook subscriptions. Actions: "list", "create", "delete". Each subscription has "id", "targetUrl", "event" and "createdVia". There is no "get" and no "update", because the REST API has neither: read one by listing them, and replace a subscription by deleting it and creating another. "create" requires a public HTTPS URL; the API rejects http://, localhost and private network addresses. Event "all" receives every event. "create" returns the subscription\'s signing "secret" (starts with whsec_), and it is shown ONCE: "list" never returns it and nothing else will, so give it to the user straight away to store with the receiving endpoint. A lost secret means deleting the subscription and creating another. Every delivery carries an "x-keel-signature" header: the lowercase hex HMAC-SHA256 of the raw request body, keyed with the whole secret string. The receiver recomputes it over the exact bytes it received, compares in constant time, and can reject a body whose "at" timestamp is more than a few minutes old to refuse replays. DELETING NEEDS THE OWNER OR ADMIN ROLE. That gate is new: this endpoint used to accept any valid key, so an integration running on a key created before keys carried an actor now gets 403 here and the key has to be re-created. Deleting is idempotent, so a success does not prove a subscription existed; list them to confirm.',
       inputSchema: z.strictObject({
         action: z.enum(['list', 'create', 'delete']),
         id: z.string().optional().describe('The subscription id. Required for delete.'),
@@ -756,15 +785,17 @@ export function registerTools(server: McpServer): void {
           case 'list':
             only(T, 'list', a, []);
             return keelFetch('/hooks');
-          case 'create':
+          case 'create': {
             only(T, 'create', a, ['targetUrl', 'event']);
-            return keelFetch('/hooks', {
+            const text = await keelFetch('/hooks', {
               method: 'POST',
               body: compact({
                 targetUrl: need(T, 'create', 'targetUrl', a.targetUrl),
                 event: a.event,
               }),
             });
+            return withSecretNote(text);
+          }
           case 'delete':
             only(T, 'delete', a, ['id']);
             return keelFetch(`/hooks/${seg(need(T, 'delete', 'id', a.id))}`, { method: 'DELETE' });

@@ -51,6 +51,10 @@ tool description so a model reads an answer rather than a hole:
   `keel_starter_controls` and `map` refuse a framework the workspace has not applied.
 - `keel_webhooks` has no **get** or **update**. The API has neither. List them to read
   one, and replace a subscription by deleting it and creating another.
+- `keel_webhooks` `create` returns the subscription's signing `secret` **once**, with a
+  `secretNote` telling the model to hand it to the user. `list` never returns it. Each
+  delivery carries `x-keel-signature`, the hex HMAC-SHA256 of the raw body keyed with the
+  whole secret; recompute it over the exact bytes received and compare in constant time.
 - `keel_vendors` reads the authentication posture (`auth`) and cannot write it. The
   underlying update treats any one of `mfa`, `passwordPolicy` and `sso` as the caller
   owning all three, so a partial write would silently clear the other two.
