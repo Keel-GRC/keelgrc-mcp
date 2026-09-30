@@ -43,6 +43,10 @@ deployment without these, `rotate` answers 404 and `list` returns full URLs as b
   the old one keeps signing until the expiry (D829a, D830a). Additive.
 - `scripts/webhook-secret-test.mjs` covers `rotate`: the path, the empty body, the fields
   passed through, the note, and the refusals for a missing `id` or a stray argument.
+- `keel_tasks` `list` takes an optional `query`, a case-insensitive substring over the
+  task title, sent as `GET /api/v1/tasks?query=` the way `keel_controls` and `keel_vendors`
+  send theirs. Paired with the keelgrc-v1 change that adds the filter (D833b). Against a
+  Keel deployment without it the parameter is ignored and every task comes back. Additive.
 
 ### Changed (D835a)
 

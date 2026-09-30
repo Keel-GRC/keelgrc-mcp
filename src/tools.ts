@@ -293,10 +293,14 @@ export function registerTools(server: McpServer): void {
     'keel_tasks',
     {
       description:
-        'Read and maintain the workspace compliance tasks. Actions: "list", "get", "create", "update". Each task has "id", "title", "description", "status" (open / in_progress / blocked / done / cancelled), "dueAt", "createdAt", "relatedEntityType" and the assignee as "assigneeId" / "assigneeName" / "assigneeEmail". There is NO "delete", and that is not a gap in this server: Keel has no delete-a-task operation on any surface, the app included, so nothing to map exists. Retire a task by updating its "status" to "cancelled", which keeps it as a record of what was decided. "update" changes the status, the assignee, or both; title, description and due date are not editable after creation, in the app either. Assign with "assigneeEmail", which must be the email of a workspace member (see keel_members) or the call fails and nothing is written; the assignment fires the task.assigned webhook but sends no email. Tasks have no start date. Any role except auditor.',
+        'Read and maintain the workspace compliance tasks. Actions: "list" (optional "query" substring over the title), "get", "create", "update". Each task has "id", "title", "description", "status" (open / in_progress / blocked / done / cancelled), "dueAt", "createdAt", "relatedEntityType" and the assignee as "assigneeId" / "assigneeName" / "assigneeEmail". There is NO "delete", and that is not a gap in this server: Keel has no delete-a-task operation on any surface, the app included, so nothing to map exists. Retire a task by updating its "status" to "cancelled", which keeps it as a record of what was decided. "update" changes the status, the assignee, or both; title, description and due date are not editable after creation, in the app either. Assign with "assigneeEmail", which must be the email of a workspace member (see keel_members) or the call fails and nothing is written; the assignment fires the task.assigned webhook but sends no email. Tasks have no start date. Any role except auditor.',
       inputSchema: z.strictObject({
         action: z.enum(['list', 'get', 'create', 'update']),
         id: idField('task'),
+        query: z
+          .string()
+          .optional()
+          .describe('list only: case-insensitive substring filter over the task title.'),
         title: z.string().optional().describe('create only: short task title (required).'),
         description: z.string().optional().describe('create only.'),
         dueAt: z
@@ -323,8 +327,8 @@ export function registerTools(server: McpServer): void {
         const T = 'keel_tasks';
         switch (a.action) {
           case 'list':
-            only(T, 'list', a, []);
-            return keelFetch('/tasks');
+            only(T, 'list', a, ['query']);
+            return keelFetch(`/tasks${qs({ query: a.query })}`);
           case 'get':
             only(T, 'get', a, ['id']);
             return keelFetch(`/tasks/${seg(need(T, 'get', 'id', a.id))}`);
