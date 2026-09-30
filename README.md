@@ -35,7 +35,7 @@ past roughly a hundred tools.
 | `keel_people` | list, get, create, update, delete | `/people`, `/people/{id}` |
 | `keel_policies` | list, get, create, update, delete | `/policies`, `/policies/{id}` |
 | `keel_evidence` | list, get, create, update, delete | `/evidence`, `/evidence/{id}` |
-| `keel_webhooks` | list, create, delete | `/hooks`, `/hooks/{id}` |
+| `keel_webhooks` | list, create, rotate, delete | `/hooks`, `/hooks/{id}`, `/hooks/{id}/rotate` |
 
 Some actions are absent. Each is a gap in the REST surface, and each is stated in the
 tool description so a model reads an answer rather than a hole:
@@ -51,6 +51,17 @@ tool description so a model reads an answer rather than a hole:
   `keel_starter_controls` and `map` refuse a framework the workspace has not applied.
 - `keel_webhooks` has no **get** or **update**. The API has neither. List them to read
   one, and replace a subscription by deleting it and creating another.
+- `keel_webhooks` `create` returns the subscription's signing `secret` **once**, with a
+  `secretNote` telling the model to hand it to the user. `list` never returns it. `rotate`
+  issues a new secret the same way and returns `previousSecretExpiresAt`: the old secret
+  keeps signing for 24 hours, so a receiver can switch without dropping events.
+- Each delivery carries `x-keel-event-id`, `x-keel-subscription-id` and
+  `x-keel-signature: v1=<hex>`, the hex HMAC-SHA256 of the raw body keyed with the whole
+  secret. During a rotation window the header holds two comma-separated `v1=` values,
+  current first. Recompute the HMAC over the exact bytes received, accept if it equals any
+  `v1=` value (constant-time comparison), and deduplicate on `x-keel-event-id`.
+- `keel_webhooks` `list` shows each full `targetUrl` only to an owner or admin key. Any
+  other key sees just the origin (`https://host`).
 - `keel_vendors` reads the authentication posture (`auth`) and cannot write it. The
   underlying update treats any one of `mfa`, `passwordPolicy` and `sso` as the caller
   owning all three, so a partial write would silently clear the other two.
@@ -74,7 +85,7 @@ A key created **before keys carried an actor** has no member and therefore no ro
 It can still read; every write answers 403 until the key is re-created under
 **Integrations -> API keys**. **Deleting a webhook subscription requires owner or
 admin**, where it used to accept any valid key, so a Zapier unsubscribe running on an
-old key fails and needs a fresh key.
+old key fails and needs a fresh key. Rotating a webhook secret needs owner or admin too.
 
 ### Unknown arguments are errors
 

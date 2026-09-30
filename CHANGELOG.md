@@ -6,6 +6,17 @@ Paired with the keelgrc-v1 change that moves `POST /api/v1/people` from "any rol
 auditor" to owner or admin (D824). The role check is on the Keel side, so it applies to
 every version of this server as soon as that change deploys.
 
+Also paired with the keelgrc-v1 change that makes webhook signing real (D827a):
+`POST /api/v1/hooks` generates a signing secret, stores it, and returns it once in the 201
+body. Deliveries to that subscription then carry `x-keel-signature`.
+
+The same keelgrc-v1 change settles the signature format before anything consumes it
+(D829a): the header value is `v1=<hex>`, deliveries carry `x-keel-event-id` and
+`x-keel-subscription-id`, and `POST /api/v1/hooks/{id}/rotate` replaces a secret with a
+24-hour window in which both sign. It also cuts `targetUrl` to its origin in
+`GET /api/v1/hooks` for any key that is not owner or admin (D831a). Against a Keel
+deployment without these, `rotate` answers 404 and `list` returns full URLs as before.
+
 ### Changed
 
 - **Breaking for member keys:** `keel_people` `create` now needs a key created by an
@@ -19,6 +30,29 @@ every version of this server as soon as that change deploys.
 
 - `scripts/forbidden-test.mjs`, run by `npm test`: a 403 on `keel_people` `create`
   reaches the client as an error carrying the API's own message.
+- `keel_webhooks` `create` surfaces the subscription's signing `secret`, which
+  `POST /api/v1/hooks` now returns once (keelgrc-v1, D827a). The result keeps every field
+  the API sent and adds `secretNote`, which tells the model the secret is shown once and how
+  a receiver verifies the `x-keel-signature` header. Against a Keel deployment that predates
+  the change there is no `secret`, and the result is passed through unchanged. Additive.
+- `scripts/webhook-secret-test.mjs`, run by `npm test`: `create` passes the secret through
+  with the note, `list` output is untouched, and a response with no secret gets no note.
+- `keel_webhooks` `rotate` (takes `id`, owner or admin): calls
+  `POST /api/v1/hooks/{id}/rotate` with no body and returns the new `secret` and
+  `previousSecretExpiresAt` with a `secretNote`, which says the secret is shown once and
+  the old one keeps signing until the expiry (D829a, D830a). Additive.
+- `scripts/webhook-secret-test.mjs` covers `rotate`: the path, the empty body, the fields
+  passed through, the note, and the refusals for a missing `id` or a stray argument.
+
+### Changed (D827a)
+
+- The `keel_webhooks` description no longer says the signing secret is never returned.
+  It says `create` returns it once and describes how to verify a delivery.
+- The `keel_webhooks` description and the create note describe the D829a contract:
+  `x-keel-signature: v1=<hex>`, two comma-separated values during a rotation window,
+  accept if any `v1=` value matches, and deduplicate on `x-keel-event-id`. They also name
+  `x-keel-subscription-id`, and the description says `list` shows only the origin of
+  `targetUrl` to a key that is not owner or admin (D831a).
 
 ## 0.6.0
 
