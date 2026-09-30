@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.0
 
 Paired with the keelgrc-v1 change that moves `POST /api/v1/people` from "any role except
 auditor" to owner or admin (D824). The role check is on the Keel side, so it applies to
