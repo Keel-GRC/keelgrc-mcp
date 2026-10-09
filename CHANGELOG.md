@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.8.0
+
+### Added
+
+- A library entry, `keelgrc-mcp/server`, exporting `createKeelMcpServer({ apiKey, baseUrl,
+  fetch, version })`. It builds the same server the `keelgrc-mcp` binary runs, bound to one
+  API key and with no transport attached, so Keel can host it over Streamable HTTP at
+  `app.keelgrc.com/mcp` with each request carrying its caller's key (D892). Types ship
+  with it.
+
+### Changed
+
+- The API client is built per key (`createKeelFetch`) instead of reading `KEEL_API_KEY`
+  inside every call. The stdio binary still reads the key from the environment at boot and
+  behaves as before.
+- `@modelcontextprotocol/sdk` moves to `^1.32.1`, clearing GHSA-6qxp-vccf-f47h (high, affects
+  1.12.0 to 1.30.1). The lockfile also moves `ip-address` to 10.7.3, clearing four moderate
+  advisories. `npm audit` reports 0.
+
 ## 0.7.0
 
 Paired with the keelgrc-v1 change that moves `POST /api/v1/people` from "any role except
