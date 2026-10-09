@@ -48,7 +48,7 @@
  */
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { compact, keelFetch, need, only, qs, seg, tool } from './api.js';
+import { compact, keelFetch as envKeelFetch, need, only, qs, seg, tool, type KeelFetch } from './api.js';
 
 /** `id` field, phrased per resource so the model knows which id is wanted. */
 const idField = (what: string) =>
@@ -114,7 +114,11 @@ export function withSecretNote(text: string, note: string = WEBHOOK_SECRET_NOTE)
   return JSON.stringify({ ...(body as Record<string, unknown>), secretNote: note });
 }
 
-export function registerTools(server: McpServer): void {
+/**
+ * Register every tool on `server`. `keelFetch` is the API client the tools call; the
+ * stdio server leaves it at the environment's, the hosted server passes one per request.
+ */
+export function registerTools(server: McpServer, keelFetch: KeelFetch = envKeelFetch): void {
   // --- Identity -------------------------------------------------------------
   server.registerTool(
     'keel_whoami',

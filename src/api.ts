@@ -7,7 +7,17 @@
  * that can drift from it.
  */
 
-const BASE_URL = (process.env.KEEL_BASE_URL || 'https://app.keelgrc.com').replace(/\/+$/, '');
+/**
+ * Drop trailing slashes. A loop rather than `/\/+$/`: that regex backtracks
+ * quadratically on a long run of slashes, and `baseUrl` is library input.
+ */
+function trimSlashes(url: string): string {
+  let end = url.length;
+  while (end > 0 && url[end - 1] === '/') end--;
+  return url.slice(0, end);
+}
+
+const BASE_URL = trimSlashes(process.env.KEEL_BASE_URL || 'https://app.keelgrc.com');
 const API_KEY = process.env.KEEL_API_KEY?.trim() ?? '';
 
 /** The origin every request goes to. Exported so the boot banner can print it. */
@@ -86,33 +96,60 @@ export function seg(id: string): string {
   return encodeURIComponent(id);
 }
 
-/** Call the Keel API and return the raw response body, throwing on non-2xx. */
-export async function keelFetch(
+/** One authenticated call to `/api/v1`: the raw response body, or a throw on non-2xx. */
+export type KeelFetch = (
   path: string,
   init?: { method?: string; body?: unknown },
-): Promise<string> {
-  if (!API_KEY) {
-    throw new Error(
-      'KEEL_API_KEY is not set. Create an API key under Integrations in your Keel workspace and set KEEL_API_KEY.',
-    );
-  }
-  const res = await fetch(`${BASE_URL}/api/v1${path}`, {
-    method: init?.method ?? 'GET',
-    headers: {
-      authorization: `Bearer ${API_KEY}`,
-      ...(init?.body !== undefined ? { 'content-type': 'application/json' } : {}),
-    },
-    body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
-  });
-  const text = await res.text();
-  if (!res.ok) {
-    throw new Error(`Keel API ${res.status} ${res.statusText}: ${text || '(empty body)'}`);
-  }
-  // A 204 has no body. Returning a bare `{}` made a successful delete
-  // indistinguishable from "nothing happened"; say what the status actually was.
-  if (!text) return JSON.stringify({ ok: true, status: res.status });
-  return text;
+) => Promise<string>;
+
+export interface KeelClientOptions {
+  /** A workspace API key. Empty means every call throws with a message saying so. */
+  apiKey: string;
+  /** Workspace origin, e.g. https://app.keelgrc.com. Trailing slashes are dropped. */
+  baseUrl?: string;
+  /** The fetch to use. The hosted server passes one that stays inside its own Worker. */
+  fetch?: typeof fetch;
 }
+
+/**
+ * Build a `KeelFetch` bound to one API key.
+ *
+ * The stdio server builds one from the environment at boot. The hosted server at
+ * app.keelgrc.com/mcp builds one per request from the caller's own bearer token, so a
+ * key never outlives the request that carried it and two callers never share one.
+ */
+export function createKeelFetch(opts: KeelClientOptions): KeelFetch {
+  const key = opts.apiKey.trim();
+  const origin = trimSlashes(opts.baseUrl || 'https://app.keelgrc.com');
+  return async (path, init) => {
+    if (!key) {
+      throw new Error(
+        'No Keel API key. Create an API key under Integrations in your Keel workspace and set KEEL_API_KEY (stdio) or send it as a bearer token (hosted).',
+      );
+    }
+    // The global is read at call time, not captured here, so a test or polyfill that
+    // replaces `fetch` after this module loads is still the one used.
+    const res = await (opts.fetch ?? fetch)(`${origin}/api/v1${path}`, {
+      method: init?.method ?? 'GET',
+      headers: {
+        authorization: `Bearer ${key}`,
+        ...(init?.body !== undefined ? { 'content-type': 'application/json' } : {}),
+      },
+      body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      throw new Error(`Keel API ${res.status} ${res.statusText}: ${text || '(empty body)'}`);
+    }
+    // A 204 has no body. Returning a bare `{}` made a successful delete
+    // indistinguishable from "nothing happened"; say what the status actually was.
+    if (!text) return JSON.stringify({ ok: true, status: res.status });
+    return text;
+  };
+}
+
+/** The stdio server's client: key and origin from the environment. */
+export const keelFetch: KeelFetch = createKeelFetch({ apiKey: API_KEY, baseUrl: BASE_URL });
 
 /** Wrap a tool body so any error surfaces to the client as an isError text result. */
 export async function tool(run: () => Promise<string>) {
