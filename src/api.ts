@@ -7,7 +7,17 @@
  * that can drift from it.
  */
 
-const BASE_URL = (process.env.KEEL_BASE_URL || 'https://app.keelgrc.com').replace(/\/+$/, '');
+/**
+ * Drop trailing slashes. A loop rather than `/\/+$/`: that regex backtracks
+ * quadratically on a long run of slashes, and `baseUrl` is library input.
+ */
+function trimSlashes(url: string): string {
+  let end = url.length;
+  while (end > 0 && url[end - 1] === '/') end--;
+  return url.slice(0, end);
+}
+
+const BASE_URL = trimSlashes(process.env.KEEL_BASE_URL || 'https://app.keelgrc.com');
 const API_KEY = process.env.KEEL_API_KEY?.trim() ?? '';
 
 /** The origin every request goes to. Exported so the boot banner can print it. */
@@ -110,7 +120,7 @@ export interface KeelClientOptions {
  */
 export function createKeelFetch(opts: KeelClientOptions): KeelFetch {
   const key = opts.apiKey.trim();
-  const origin = (opts.baseUrl || 'https://app.keelgrc.com').replace(/\/+$/, '');
+  const origin = trimSlashes(opts.baseUrl || 'https://app.keelgrc.com');
   return async (path, init) => {
     if (!key) {
       throw new Error(
