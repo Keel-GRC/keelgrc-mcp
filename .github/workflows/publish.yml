@@ -95,5 +95,14 @@ jobs:
       - name: Smoke test the built server
         run: node scripts/smoke.mjs
 
+      # The regression tests `npm test` runs. Without these steps they ran only on a
+      # laptop, so a release could ship a regression they exist to catch.
+      - name: Regression tests
+        run: |
+          node scripts/seg-test.mjs
+          node scripts/forbidden-test.mjs
+          node scripts/webhook-secret-test.mjs
+          node scripts/hosted-test.mjs
+
       - name: Publish to npm (OIDC trusted publishing)
         run: npm publish --access public --ignore-scripts

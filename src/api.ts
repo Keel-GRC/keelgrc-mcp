@@ -17,8 +17,17 @@ function trimSlashes(url: string): string {
   return url.slice(0, end);
 }
 
-const BASE_URL = trimSlashes(process.env.KEEL_BASE_URL || 'https://app.keelgrc.com');
-const API_KEY = process.env.KEEL_API_KEY?.trim() ?? '';
+/**
+ * Read one variable without assuming `process` exists. `server.ts` imports this
+ * module, and a Cloudflare Worker without `nodejs_compat` has no `process`, so a bare
+ * `process.env` here would throw a ReferenceError on import.
+ */
+function env(name: string): string | undefined {
+  return typeof process === 'undefined' ? undefined : process.env?.[name];
+}
+
+const BASE_URL = trimSlashes(env('KEEL_BASE_URL') || 'https://app.keelgrc.com');
+const API_KEY = env('KEEL_API_KEY')?.trim() ?? '';
 
 /** The origin every request goes to. Exported so the boot banner can print it. */
 export const baseUrl = BASE_URL;
