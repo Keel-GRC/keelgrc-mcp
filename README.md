@@ -65,6 +65,9 @@ tool description so a model reads an answer rather than a hole:
 - `keel_vendors` reads the authentication posture (`auth`) and cannot write it. The
   underlying update treats any one of `mfa`, `passwordPolicy` and `sso` as the caller
   owning all three, so a partial write would silently clear the other two.
+- `keel_vendors` `create` takes no **owners**. Set `businessOwnerEmail` and
+  `securityOwnerEmail` with `update`; null clears one, and omitting one leaves it. An
+  owner change fires no webhook event, matching the app.
 - `keel_evidence` `create` covers **link evidence only**. `POST /evidence` also accepts
   a file as `multipart/form-data`, which is not something a stdio transport streams
   well; a tool that half-worked would be worse than one that says what it covers.
@@ -95,9 +98,10 @@ send. Before 0.4.0 both were dropped silently and the call still reported succes
 does the same on its side: a write whose body carries an undocumented field gets a 400
 listing it in `unknownFields`.
 
-People are named by email where the API resolves them: `assigneeEmail` on tasks and
-`ownerEmail` on policies must match a workspace member (`keel_members` lists them), or
-the call fails and nothing is written. Evidence links to controls through
+People are named by email where the API resolves them: `assigneeEmail` on tasks,
+`ownerEmail` on policies, and `businessOwnerEmail` and `securityOwnerEmail` on vendors
+must match a workspace member (`keel_members` lists them), or the call fails and nothing
+is written. Evidence links to controls through
 `controlId`/`controlKey` on create and `linkControls`/`unlinkControls` on update; a
 control that is not in the workspace is an error rather than a missing link.
 

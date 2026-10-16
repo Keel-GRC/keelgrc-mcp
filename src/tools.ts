@@ -135,7 +135,7 @@ export function registerTools(server: McpServer, keelFetch: KeelFetch = envKeelF
     'keel_members',
     {
       description:
-        'List the people with a seat in this workspace, as {"members":[{"id","email","name","role"}]}, where "role" is owner / admin / member / auditor. Takes no arguments; read-only. These ids are what "ownerMembershipId" on a policy, "ownerId" on evidence and "assigneeId" on a task hold, and the emails are what "ownerEmail" (policies) and "assigneeEmail" (tasks) must match. This is not the HR directory: keel_people lists employees, including ones with no Keel seat.',
+        'List the people with a seat in this workspace, as {"members":[{"id","email","name","role"}]}, where "role" is owner / admin / member / auditor. Takes no arguments; read-only. These ids are what "ownerMembershipId" on a policy, "ownerId" on evidence and "assigneeId" on a task hold, and the emails are what "ownerEmail" (policies), "assigneeEmail" (tasks) and "businessOwnerEmail" / "securityOwnerEmail" (vendors) must match. Vendors hold the ids as "businessOwnerId" and "securityOwnerId". This is not the HR directory: keel_people lists employees, including ones with no Keel seat.',
       inputSchema: z.strictObject({}),
     },
     () => tool(() => keelFetch('/members')),
@@ -444,7 +444,7 @@ export function registerTools(server: McpServer, keelFetch: KeelFetch = envKeelF
     'keel_vendors',
     {
       description:
-        'Read and maintain the third-party vendor register. Actions: "list" (optional "query" substring over the name), "get", "create", "update", "delete". Each vendor has "id", "name", "website", "contactEmail", "tier", "inherentTier", "residualTier", "auth", "authCredits", "status", "dataAccess", "notes", "lastReviewedAt" and "reviewDue". READ THE TIER FIELDS CAREFULLY: "tier" on the way out is the EFFECTIVE (residual) criticality after the vendor\'s access controls are credited, while "tier" on the way in sets the INHERENT criticality. Reading a vendor and sending its "tier" straight back therefore writes the residual into the inherent value and ratchets it down; send "inherentTier" back as "tier" instead. The authentication posture ("auth": mfa, passwordPolicy, sso) is readable and NOT writable here, because the underlying update treats any one of the three as the caller owning all three and would silently clear the other two. Change it in the Keel app. Creating and updating need any role except auditor; deleting does too, matching the app.',
+        'Read and maintain the third-party vendor register. Actions: "list" (optional "query" substring over the name), "get", "create", "update", "delete". Each vendor has "id", "name", "website", "contactEmail", "tier", "inherentTier", "residualTier", "auth", "authCredits", "status", "dataAccess", "notes", "lastReviewedAt", "reviewDue", "thirdPartyId", and the owners as "businessOwnerId" and "securityOwnerId" (workspace member ids; keel_members maps them to people). READ THE TIER FIELDS CAREFULLY: "tier" on the way out is the EFFECTIVE (residual) criticality after the vendor\'s access controls are credited, while "tier" on the way in sets the INHERENT criticality. Reading a vendor and sending its "tier" straight back therefore writes the residual into the inherent value and ratchets it down; send "inherentTier" back as "tier" instead. The authentication posture ("auth": mfa, passwordPolicy, sso) is readable and NOT writable here, because the underlying update treats any one of the three as the caller owning all three and would silently clear the other two. Change it in the Keel app. Set owners on "update" with "businessOwnerEmail" and "securityOwnerEmail", each the email of a workspace member (see keel_members); an address that matches no member fails the call and nothing is written, null clears that owner, and omitting one leaves it as it is. "create" takes no owners, so create first and then update. An owner change fires no webhook event. Creating and updating need any role except auditor; deleting does too, matching the app.',
       inputSchema: z.strictObject({
         action: z.enum(['list', 'get', 'create', 'update', 'delete']),
         id: idField('vendor'),
@@ -473,6 +473,20 @@ export function registerTools(server: McpServer, keelFetch: KeelFetch = envKeelF
           .optional()
           .describe('What customer or company data this vendor can reach.'),
         notes: z.string().optional(),
+        businessOwnerEmail: z
+          .string()
+          .nullable()
+          .optional()
+          .describe(
+            'update only: email of the workspace member who owns the relationship. null clears it; omit to leave it.',
+          ),
+        securityOwnerEmail: z
+          .string()
+          .nullable()
+          .optional()
+          .describe(
+            'update only: email of the workspace member who owns the security review. null clears it; omit to leave it.',
+          ),
       }),
     },
     (a) =>
@@ -500,7 +514,19 @@ export function registerTools(server: McpServer, keelFetch: KeelFetch = envKeelF
               }),
             });
           case 'update':
-            only(T, 'update', a, ['id', 'name', 'tier', 'residualTier', 'status', 'website', 'contactEmail', 'dataAccess', 'notes']);
+            only(T, 'update', a, [
+              'id',
+              'name',
+              'tier',
+              'residualTier',
+              'status',
+              'website',
+              'contactEmail',
+              'dataAccess',
+              'notes',
+              'businessOwnerEmail',
+              'securityOwnerEmail',
+            ]);
             return keelFetch(`/vendors/${seg(need(T, 'update', 'id', a.id))}`, {
               method: 'PATCH',
               body: compact({
@@ -512,6 +538,8 @@ export function registerTools(server: McpServer, keelFetch: KeelFetch = envKeelF
                 contactEmail: a.contactEmail,
                 dataAccess: a.dataAccess,
                 notes: a.notes,
+                businessOwnerEmail: a.businessOwnerEmail,
+                securityOwnerEmail: a.securityOwnerEmail,
               }),
             });
           case 'delete':
