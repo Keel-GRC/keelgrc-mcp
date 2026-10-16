@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.9.0
+
+Paired with the keelgrc-v1 change that lets `PATCH /api/v1/vendors/{id}` set vendor owners
+(D953). Against a Keel deployment without it, the API refuses both new fields with a 400
+listing them in `unknownFields`, and nothing is written.
+
+### Added
+
+- `keel_vendors` `update` takes `businessOwnerEmail` and `securityOwnerEmail`. Each must be
+  the email of a workspace member, or the call fails and nothing is written. null clears
+  that owner and omitting one leaves it, so setting one owner keeps the other. `create`
+  takes no owners; create first and then update. An owner change fires no webhook event,
+  matching the Keel app.
+- The `keel_vendors` description names `thirdPartyId`, `businessOwnerId` and
+  `securityOwnerId`, which the API already returned on every vendor.
+
 ## 0.8.0
 
 ### Added
